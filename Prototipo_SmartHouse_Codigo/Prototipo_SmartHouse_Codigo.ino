@@ -6,6 +6,21 @@
   /*LUZ PRINCIPAL CONTROLADA POR LDR*/
    int principal = 12;
    int sensorReading;//Pin análogo en espera
+
+  /*SENSOR TEMPERATURA Y HUMEDAD*/
+  // Libreria para Sensor DHT
+    #include <DHT.h>
+
+  // Libreria para Display LCD
+    #include  <LiquidCrystal.h>
+
+  // Teperatura y humedad
+    int SENSOR = 11;
+    int temp, humedad;
+    
+    DHT dht (SENSOR, DHT11); //id del sensor. Puede ser DHT11 o DHT22
+
+  //  LiquidCrystal lcd(12, 11, 5, 4, 3, 2);  // pantalla
   
    
   void setup()  {
@@ -14,11 +29,16 @@
     pinMode(HABITACION, OUTPUT); // Pin digital del LED como salida.
     pinMode(principal,OUTPUT);  // habitacion principal
 
+    /*HUMEDAD Y TEMPERATURA*/
+     dht.begin(); 
+    // lcd.begin(16, 2);
+
   }
 
   void loop()  {
     Habitacion();
     Principal ();
+    Humedad();
   }
    
   void Habitacion ()  {
@@ -45,6 +65,8 @@
   }
 
   void Principal(){
+    /* Si esta recibiendo luz el led permanece a pagado, de lo contrario se enciende.*/
+    
     sensorReading=analogRead(0); //Instrucción para obtener dato analógico
       if (sensorReading<200) {
         digitalWrite(principal,HIGH);
@@ -52,4 +74,30 @@
         digitalWrite(principal,LOW);
         Serial.println(sensorReading); 
   }
+
+  
+void Humedad (){
+  //lcd.home(); // Iniciamos el curso del lcd en el inicio
+  humedad = dht.readHumidity();  // lee temperatura
+  temp = dht.readTemperature();   // lee humedad
+
+  //lcd.print("Temperatura:");
+  //lcd.print (temp);
+
+//serial  
+  Serial.print("Temperatura: ");
+  Serial.println(temp);
+
+  //lcd.setCursor(0,1);
+
+  //lcd.print("Humedad: ");
+  //lcd.print(humedad);
+  
+//serial
+  Serial.print("Humedad: ");
+  Serial.print(humedad);
+  Serial.println("%");
+
+  delay(500);
+}
 
