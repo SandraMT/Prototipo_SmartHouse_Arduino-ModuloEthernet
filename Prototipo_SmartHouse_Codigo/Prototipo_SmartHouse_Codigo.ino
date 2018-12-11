@@ -1,3 +1,6 @@
+/**/
+const int pinBuzzer = 10;
+/**/
 
   /*HABITACION*/
   int HABITACION = 13; // Pin digital para el LED  
@@ -38,6 +41,7 @@
   void loop()  {
     Habitacion();
     Principal ();
+
     Humedad();
   }
    
@@ -68,14 +72,16 @@
     /* Si esta recibiendo luz el led permanece a pagado, de lo contrario se enciende.*/
     
     sensorReading=analogRead(0); //Instrucción para obtener dato analógico
-      if (sensorReading<200) {
+      if (sensorReading<200) {  // no recibe luz = es de noche
         digitalWrite(principal,HIGH);
-    } else 
+            
+    } else  // recibe luz = es de día
         digitalWrite(principal,LOW);
         Serial.println(sensorReading); 
+
   }
 
-  
+
 void Humedad (){
   //lcd.home(); // Iniciamos el curso del lcd en el inicio
   humedad = dht.readHumidity();  // lee temperatura
@@ -99,5 +105,12 @@ void Humedad (){
   Serial.println("%");
 
   delay(500);
+
+    // alarma para exceso de humedad
+  if( humedad>=200){
+    tone(pinBuzzer, 523, 300);
+  }else 
+  noTone(pinBuzzer);
+
 }
 
