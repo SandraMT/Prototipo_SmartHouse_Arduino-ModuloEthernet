@@ -1,3 +1,17 @@
+  /* Adaptador ETHERNET */
+#include <EtherCard.h>
+
+static byte mymac[] = {0xDD,0xDD,0xDD,0x00,0x01,0x05};  // DIRECCIÓN MAC DEL DISPOSITIVO
+static byte myip[] = {192,168,1,177};                   // DIRECCIÓN IP DEL DISPOSITIVO
+byte Ethernet::buffer[700];                             // Tamaño del buffer 
+
+  /*SENSOR TEMPERATURA Y HUMEDAD*/
+  // Libreria para Sensor DHT
+    #include <DHT.h>
+
+  // Libreria para Display LCD
+    #include  <LiquidCrystal.h>
+
 /**/
 const int pinBuzzer = 10;
 /**/
@@ -9,13 +23,6 @@ const int pinBuzzer = 10;
   /*LUZ PRINCIPAL CONTROLADA POR LDR*/
    int principal = 12;
    int sensorReading;//Pin análogo en espera
-
-  /*SENSOR TEMPERATURA Y HUMEDAD*/
-  // Libreria para Sensor DHT
-    #include <DHT.h>
-
-  // Libreria para Display LCD
-    #include  <LiquidCrystal.h>
 
   // Teperatura y humedad
     int SENSOR = 11;
@@ -29,6 +36,16 @@ const int pinBuzzer = 10;
   void setup()  {
     
     Serial.begin(9600); // Velocidad de comunicación en baudios.
+ 
+   if (!ether.begin(sizeof Ethernet::buffer, mymac, 10))
+      Serial.println("No se ha podido acceder a la controlador Ethernet");
+   else
+      Serial.println("Controlador Ethernet inicializado");
+ 
+   if (!ether.staticSetup(myip))
+      Serial.println("No se pudo establecer la dirección IP");
+    Serial.println();
+    
     pinMode(HABITACION, OUTPUT); // Pin digital del LED como salida.
     pinMode(principal,OUTPUT);  // habitacion principal
 
@@ -39,6 +56,52 @@ const int pinBuzzer = 10;
   }
 
   void loop()  {
+
+  word len = ether.packetReceive();
+    word pos = ether.packetLoop(len);
+
+     if (pos) 
+   {
+      if (strstr((char *)Ethernet::buffer + pos, "GET /?foco=L") != 0) {
+         Serial.println("Foco Apagado");
+         digitalWrite(pinLed1, LOW);
+         statusLed1 = "OFF";
+      }
+ 
+      if (strstr((char *)Ethernet::buffer + pos, "GET /?foco=L") != 0) {
+         Serial.println("Foco Encendido");
+         digitalWrite(pinLed1, HIGH);
+         statusLed1 = "ON";
+      }
+ 
+      if (strstr((char *)Ethernet::buffer + pos, "GET /?puerta=C") != 0) {
+         Serial.println("Puerta Cerrada");
+         
+         
+      }
+ 
+      if (strstr((char *)Ethernet::buffer + pos, "GET /?puerta=A") != 0) {
+         Serial.println("Puerta abierta");
+         
+         
+      }
+
+      if (strstr((char *)Ethernet::buffer + pos, "GET /?LCD=E") != 0) {
+         Serial.println("LCD Encendido");
+         
+         
+      }
+
+      if (strstr((char *)Ethernet::buffer + pos, "GET /?LCD=A") != 0) {
+         Serial.println("LCD Apagado");
+         
+         
+      }
+ 
+ 
+      ether.httpServerReply(mainPage());
+   }
+    
     Habitacion();
     Principal ();
 
@@ -114,3 +177,24 @@ void Humedad (){
 
 }
 
+static word mainPage()
+{
+   BufferFiller bfill = ether.tcpOffset();
+   bfill.emit_p(PSTR("HTTP/1.0 200 OKrn"
+      "Content-Type: text/htmlrnPragma: no-cachernRefresh: 5rnrn"
+      "<html><head><title>Casa Inteligente</title></head>"
+      "<body><center><div style='text-align:center; background-color: chartreuse; width: 30%; height: 280px ; box-shadow: 10px 10px 29px 0px rgba(0,0,0,0.75); border-radius: 15px; '>"
+      "<h1 style='font-family: Century gothic'>Habitación</h1>"
+      "<br />FOCO DE HABITACIÓN<br />"
+      "<a href='./?foco=L'><input type='button' value='Apagado'></a>"
+      "<a href='./?foco=H'><input type='button' value='Encendido'></a>"
+      "<br /><br />PUERTA DE HABITACIÓN<br />"
+      "<a href='./?puerta=C'><input type='button' value='Cerrada'></a>"
+      "<a href='./?puerta=A'><input type='button' value='Abierta'></a>"
+      "<br /><br />LCD<br />"
+      "<a href='./?LCD=C'><input type='button' value='Desactivado'></a>"
+      "<a href='./?LCD=A'><input type='button' value='Activado'></a>"
+      "<br /></div>\n</center></body></html>"));
+ 
+   return bfill.position();
+}
