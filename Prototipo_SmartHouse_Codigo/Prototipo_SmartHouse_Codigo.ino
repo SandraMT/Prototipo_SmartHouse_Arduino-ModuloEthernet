@@ -1,28 +1,29 @@
-  /* Adaptador ETHERNET */
-#include <EtherCard.h>
+#include <SPI.h>
+#include <Ethernet.h>
 
-static byte mymac[] = {0xDD,0xDD,0xDD,0x00,0x01,0x05};  // DIRECCIÓN MAC DEL DISPOSITIVO
-static byte myip[] = {192,168,1,177};                   // DIRECCIÓN IP DEL DISPOSITIVO
-byte Ethernet::buffer[700];                             // Tamaño del buffer 
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress ip(192,168,1,177); 
+EthernetServer server(80);  
 
-  /*SENSOR TEMPERATURA Y HUMEDAD*/
-  // Libreria para Sensor DHT
-    #include <DHT.h>
+String HTTP_req;          // Para guardar la peticion del cliente
+boolean LED2_status = 0;   
 
-  // Libreria para Display LCD
-    #include  <LiquidCrystal.h>
-
+/**********CONTROLES AUTONOMOS DE LA CASA********************/
 /**/
 const int pinBuzzer = 10;
 /**/
 
   /*HABITACION*/
-  int HABITACION = 13; // Pin digital para el LED  
-  char encendido_habitacion; // Variable para guardar el valor del carácter enviado
+  int HABITACION = 2; // Pin digital para el LED  /*CAMBIO A PIN 2, ANTES 13*/
+  char estado_habitacion; // Variable para guardar el valor del carácter enviado
 
   /*LUZ PRINCIPAL CONTROLADA POR LDR*/
    int principal = 12;
    int sensorReading;//Pin análogo en espera
+
+  /*SENSOR TEMPERATURA Y HUMEDAD*/
+  // Libreria para Sensor DHT
+    #include <DHT.h>
 
   // Teperatura y humedad
     int SENSOR = 11;
@@ -31,21 +32,29 @@ const int pinBuzzer = 10;
     DHT dht (SENSOR, DHT11); //id del sensor. Puede ser DHT11 o DHT22
 
   //  LiquidCrystal lcd(12, 11, 5, 4, 3, 2);  // pantalla
-  
-   
-  void setup()  {
-    
-    Serial.begin(9600); // Velocidad de comunicación en baudios.
+
+  /*CONTROL ENTRADA PRINCIPAL*/
+    const int sensor_puerta = 9;
+    const int ENTRADA = 8;
+
+ /*CONTROL PUERTA HABITACION*/
+    #include <Servo.h>
  
-   if (!ether.begin(sizeof Ethernet::buffer, mymac, 10))
-      Serial.println("No se ha podido acceder a la controlador Ethernet");
-   else
-      Serial.println("Controlador Ethernet inicializado");
+    Servo myservo;  // crea el objeto servo
  
-   if (!ether.staticSetup(myip))
-      Serial.println("No se pudo establecer la dirección IP");
-    Serial.println();
-    
+    int pos = 0;    // posicion del servo
+    char puerta;
+
+/********FIN DE CONTROLES AUTONOMOS DE LA CASA*************/
+
+void setup(){
+    Ethernet.begin(mac, ip);  
+    server.begin();           
+    Serial.begin(9600);       
+    pinMode(2, OUTPUT);    
+
+/*************CONTROLES AUTONOMOS DE LA CASA*********************/
+ Serial.begin(9600); // Velocidad de comunicación en baudios.
     pinMode(HABITACION, OUTPUT); // Pin digital del LED como salida.
     pinMode(principal,OUTPUT);  // habitacion principal
 
@@ -53,83 +62,79 @@ const int pinBuzzer = 10;
      dht.begin(); 
     // lcd.begin(16, 2);
 
-  }
+    /*CONTROL ENTRADA PRINCIPAL*/
+      pinMode(sensor_puerta, INPUT_PULLUP);
+      pinMode(ENTRADA, OUTPUT);
 
-  void loop()  {
+    /*CONTROL DE PUERTA HABITACION*/
+    myservo.attach(7);  // vincula el servo al pin digital 9
 
-  word len = ether.packetReceive();
-    word pos = ether.packetLoop(len);
+/***************CONTROLES AUTONOMOS DE LA CASA****************************/
+}
 
-     if (pos) 
-   {
-      if (strstr((char *)Ethernet::buffer + pos, "GET /?foco=L") != 0) {
-         Serial.println("Foco Apagado");
-         digitalWrite(pinLed1, LOW);
-         statusLed1 = "OFF";
-      }
- 
-      if (strstr((char *)Ethernet::buffer + pos, "GET /?foco=L") != 0) {
-         Serial.println("Foco Encendido");
-         digitalWrite(pinLed1, HIGH);
-         statusLed1 = "ON";
-      }
- 
-      if (strstr((char *)Ethernet::buffer + pos, "GET /?puerta=C") != 0) {
-         Serial.println("Puerta Cerrada");
-         
-         
-      }
- 
-      if (strstr((char *)Ethernet::buffer + pos, "GET /?puerta=A") != 0) {
-         Serial.println("Puerta abierta");
-         
-         
-      }
+void loop(){
+    EthernetClient client = server.available();  // Comprobamos si hay peticiones
 
-      if (strstr((char *)Ethernet::buffer + pos, "GET /?LCD=E") != 0) {
-         Serial.println("LCD Encendido");
-         
-         
-      }
+    if (client) {                                // En caso afirmativo
+        boolean currentLineIsBlank = true;
+        while (client.connected()) {
+            if (client.available()) {   // Hay algo pendiente de leer
+                char c = client.read(); // Leemos los caracteres de uno en uno
+                HTTP_req += c;          // Los añadimos al String
+                if (c == '\n' && currentLineIsBlank) 
+                  {
+                    client.println("HTTP/1.1 200 OK");
+                    client.println("Content-Type: text/html");
+                    client.println("Connection: close");
+                    client.println();
+                    // send web page
+                    client.println("<!DOCTYPE html>");
+                    client.println("<html>");
+                    client.println("<head>");
+                    client.println("<title>Control de LEDs en Arduino</title>");
+                    client.println("</head>");
+                    client.println("<body>");
+                    client.println("<h1>LED</h1>");
+                    client.println("<p>Haz click para conmutar el LED.</p>");
+                    client.println("<form method=\"get\">");
+                    ProcessCheckbox(client);
+                    client.println("</form>");
+                    client.println("</body>");
+                    client.println("</html>");
+                    Serial.print(HTTP_req);
+                    HTTP_req = "";    // Una vez procesador, limpiar el string
+                    break;
+                  }
+                if (c == '\n') 
+                    currentLineIsBlank = true;
+                else if (c != '\r') 
+                    currentLineIsBlank = false;
+            } 
+        } 
+     delay(10);      // dar tiempo
+     client.stop(); // Cerra conexion
+    }
 
-      if (strstr((char *)Ethernet::buffer + pos, "GET /?LCD=A") != 0) {
-         Serial.println("LCD Apagado");
-         
-         
-      }
- 
- 
-      ether.httpServerReply(mainPage());
-   }
-    
     Habitacion();
     Principal ();
-
+    Entrada();
     Humedad();
-  }
-   
-  void Habitacion ()  {
     
-    if (Serial.available() > 0) // Si se recibe un carácter...
-    {
-      encendido_habitacion = Serial.read(); // Guardamos el valor del carácter en la variable entrada.
-   
-      if ((encendido_habitacion=='H')||(encendido_habitacion=='h')) // Si el carácter recibido es "D" o "d"
-      {      
-        digitalWrite(HABITACION, HIGH); // Se enciende el LED        
-        //Serial.write(encendido_habitacion); // verifica valor recibido
-        Serial.print("Luz de habitacion encendida");  //estado de la habitacion
-        Serial.print("\n");
-      }
-      else if ((encendido_habitacion=='L')||(encendido_habitacion=='l')) // Si el carácter recibido es "I" o "i"    
-      {
-        digitalWrite(HABITACION, LOW); // Se apaga el LED    
-       // Serial.write(encendido_habitacion); // verfica valor recibido
-        Serial.print("Luz de habitacion apagada"); //estado de la habitacion
-        Serial.print("\n");
-      }
-    }
-  }
+     
+}
+
+void ProcessCheckbox(EthernetClient cl){
+    if (HTTP_req.indexOf("LED2=2") > -1)    // LED2 pinchado?
+        LED2_status = !LED2_status ;         // Si pichado invertimos el valor
+
+    digitalWrite(2, LED2_status);
+    if (LED2_status) 
+          cl.println("<input type=\"checkbox\" name=\"LED2\" value=\"2\" \\ onclick=\"submit();\">LED2");
+    else 
+          cl.println("<input type=\"checkbox\" name=\"LED2\" value=\"2\" \\  onclick=\"submit();\">LED2");
+  
+}
+
 
   void Principal(){
     /* Si esta recibiendo luz el led permanece a pagado, de lo contrario se enciende.*/
@@ -170,31 +175,54 @@ void Humedad (){
   delay(500);
 
     // alarma para exceso de humedad
-  if( humedad>=200){
+  if( humedad>=90){
     tone(pinBuzzer, 523, 300);
   }else 
   noTone(pinBuzzer);
 
 }
 
-static word mainPage()
-{
-   BufferFiller bfill = ether.tcpOffset();
-   bfill.emit_p(PSTR("HTTP/1.0 200 OKrn"
-      "Content-Type: text/htmlrnPragma: no-cachernRefresh: 5rnrn"
-      "<html><head><title>Casa Inteligente</title></head>"
-      "<body><center><div style='text-align:center; background-color: chartreuse; width: 30%; height: 280px ; box-shadow: 10px 10px 29px 0px rgba(0,0,0,0.75); border-radius: 15px; '>"
-      "<h1 style='font-family: Century gothic'>Habitación</h1>"
-      "<br />FOCO DE HABITACIÓN<br />"
-      "<a href='./?foco=L'><input type='button' value='Apagado'></a>"
-      "<a href='./?foco=H'><input type='button' value='Encendido'></a>"
-      "<br /><br />PUERTA DE HABITACIÓN<br />"
-      "<a href='./?puerta=C'><input type='button' value='Cerrada'></a>"
-      "<a href='./?puerta=A'><input type='button' value='Abierta'></a>"
-      "<br /><br />LCD<br />"
-      "<a href='./?LCD=C'><input type='button' value='Desactivado'></a>"
-      "<a href='./?LCD=A'><input type='button' value='Activado'></a>"
-      "<br /></div>\n</center></body></html>"));
+void Entrada(){
+ int value = digitalRead(sensor_puerta);
  
-   return bfill.position();
+  if (value == LOW) {
+    /* si el sensor está activado, quiere decir que la puerta está cerrada,
+    por lo tanto el led debe de estar apagado, al abrirse la puera, se enciende el led*/
+    digitalWrite(ENTRADA, LOW);   
+  } else {
+    digitalWrite(ENTRADA, HIGH);
+  }
+ 
+  delay(1000);  
 }
+
+void Habitacion ()  {
+    
+    if (Serial.available() > 0) // Si se recibe un carácter...
+    {
+   if ((estado_habitacion=='C')||(estado_habitacion=='c')) // 
+      {      
+            //varia la posicion de 0 a 180, con esperas de 15ms
+            for (pos = 0; pos <= 80; pos += 1) {
+                myservo.write(pos);              
+                //delay(15);                       
+            }              
+        Serial.print("Habitacion abierta");  //estado de la habitacion
+        Serial.print("\n");
+      }
+      else if ((estado_habitacion=='A')||(estado_habitacion=='a')) 
+      {
+      for (pos = 80; pos >= 0; pos -= 1) {
+            myservo.write(pos);              
+          //delay(15);                       
+        }
+
+        Serial.print("Habitacion cerrada"); //estado de la habitacion
+        Serial.print("\n");
+      }
+    }//fin if serial
+  }
+
+
+
+
